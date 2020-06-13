@@ -1,0 +1,4 @@
+/home/lavleshm/.local/share/JetBrains/Toolbox/apps/CLion/ch-0/193.6494.38/bin/cmake/linux/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ -G "CodeBlocks - Unix Makefiles" /home/lavleshm/Simulator-MapleSat
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/lavleshm/Simulator-MapleSat/cmake-build-debug

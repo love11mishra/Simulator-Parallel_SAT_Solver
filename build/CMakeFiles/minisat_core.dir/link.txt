@@ -1,0 +1,1 @@
+/usr/bin/c++  -O3 -DNDEBUG  -rdynamic CMakeFiles/minisat_core.dir/core/Main.cc.o  -o minisat_core -Wl,-rpath,/usr/lib/x86_64-linux-gnu/openmpi/lib: libmaplesat.a -lz /usr/lib/x86_64-linux-gnu/openmpi/lib/libmpi_cxx.so /usr/lib/x86_64-linux-gnu/openmpi/lib/libmpi.so -lboost_context -lboost_thread -lpthread -lboost_chrono -lboost_system -lboost_date_time -lboost_atomic 
