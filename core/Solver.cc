@@ -51,6 +51,7 @@ static BoolOption    opt_luby_restart      (_cat, "luby",        "Use the Luby r
 static IntOption     opt_restart_first     (_cat, "rfirst",      "The base restart interval", 100, IntRange(1, INT32_MAX));
 static DoubleOption  opt_restart_inc       (_cat, "rinc",        "Restart interval increase factor", 2, DoubleRange(1, false, HUGE_VAL, false));
 static DoubleOption  opt_garbage_frac      (_cat, "gc-frac",     "The fraction of wasted memory allowed before a garbage collection is triggered",  0.20, DoubleRange(0, false, HUGE_VAL, false));
+
 #if BRANCHING_HEURISTIC == CHB
 static DoubleOption  opt_reward_multiplier (_cat, "reward-multiplier", "Reward multiplier", 0.9, DoubleRange(0, true, 1, true));
 #endif
@@ -824,6 +825,11 @@ bool Solver::simplify()
                 attachClause(cr);
                // claBumpActivity(ca[cr]);
 //                        addSharedClause(shared_clause);
+//                std::cout <<"received clause in " << Mpi_rank <<"\n";
+//                for (int j = 0; j < sharedClauseIn.size(); ++j) {
+//                    std::cout<<toInt(sharedClauseIn[j])<<" ";
+//                }
+//                std::cout<<"\n";
                 sharedClauseIn.clear();
             }
 
@@ -864,7 +870,7 @@ bool Solver::simplify()
             if (decisionLevel() == 0) {
                // return l_False;
                ret_search_val = l_False;
-               break;
+               return;
 //               std::cout<<"UNSATISFIABLE\n";
 //               _exit(0);
             }
@@ -889,13 +895,18 @@ bool Solver::simplify()
 ////                myfile.open(lc_file, std::ios::app);
 ////                std::string line="";
 //                sharedClauseOut.clear(); //check its requirement
-                assert(sharedClauseOut.size() == 0);
+//                assert(sharedClauseOut.size() >= 2);
                 for(int i = 0; i < buffer_len; i++){
 //                    send_buffer[i] = toInt(learnt_clause[i]);
 ////                    line += std::to_string(var(learnt_clause[i])) + " ";
 
                         sharedClauseOut.push(learnt_clause[i]);
                 }
+//                std::cout <<"clause shared from " << Mpi_rank <<"\n";
+//                for (int j = 0; j < learnt_clause.size(); ++j) {
+//                    std::cout<<toInt(learnt_clause[j])<<" ";
+//                }
+//                std::cout<<"\n";
 ////                myfile << line <<"\n";
 ////                std::cout << line <<" rank is "<< Mpi_rank<<"\n";
 ////                myfile.close();
@@ -960,7 +971,7 @@ bool Solver::simplify()
                 cancelUntil(0);
                // return l_Undef;
                ret_search_val = l_Undef;
-               break;  //very important to make it return back to solve_() method
+                return;  //very important to make it return back to solve_() method
             }
 
             // Simplify the set of problem clauses:
@@ -968,7 +979,7 @@ bool Solver::simplify()
             {
                 //return l_False;
                 ret_search_val = l_False;
-                break;
+                return;
 //                std::cout<<"UNSATISFIABLE\n";
 //                _exit(0);
             }
@@ -992,7 +1003,7 @@ bool Solver::simplify()
                     analyzeFinal(~p, conflict);
                     //return l_False;
                     ret_search_val = l_False;
-                    break;
+                    return;
 //                    std::cout<<"UNSATISFIABLE\n";
 //                    _exit(0);
                 }else{
@@ -1009,7 +1020,7 @@ bool Solver::simplify()
                 if (next == lit_Undef) {// Model found:
                    // return l_True;
                    ret_search_val = l_True;
-                   break;
+                    return;
 //                   std::cout<<"SATISFIABLE11\n";
 ////                   _exit(0);
                 }
@@ -1023,6 +1034,7 @@ bool Solver::simplify()
             uncheckedEnqueue(next);
         }
         source();
+        iterations++;
     }
 }
 

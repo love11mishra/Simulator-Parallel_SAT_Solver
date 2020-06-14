@@ -176,6 +176,7 @@ public:
 
     int Comm_size;
     int Mpi_rank;
+    long long int iterations;
     std::string lc_file;
     int nof_conflicts;
     vec<Lit>sharedClauseIn;
