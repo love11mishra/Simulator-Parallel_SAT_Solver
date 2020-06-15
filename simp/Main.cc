@@ -324,102 +324,25 @@ int main(int argc, char** argv)
                 }
             }
 
-//            if(f1 && solver()){
-//                flag = true;
-//                if(S0.readyToShare()){
-//                    S0.shareTo(S1);
-//                    S0.sharedClauseOut.clear(); //must be called only if clause has been shared with all others
-//                }
-////                std::cout << "[main]: ....... " << std::endl; //flush here
-//                }else if(isRunning[i]) {
-//                    isRunning[i] = false;
-//                    ret = solvers[i].ret_solveLimited_val;
-//                    printf("%s ",argv[1]);
-//                    printStats(solvers[i]);
-//                    printf("[Rank]: %d [Iterations]: %lld ",solvers[i].Mpi_rank, solvers[i].iterations);
-//                    printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
-//                }
-//            }
-
-//            if(f1 && solver()){
-//                flag = true;
-////                if(S0.readyToShare()){
-////                    S0.shareTo(S1);
-////                    S0.sharedClauseOut.clear(); //must be called only if clause has been shared with all others
-////                }
-////                std::cout << "[main]: ....... " << std::endl; //flush here
-//            }else if(f1) {
-//                f1 = false;
-//                ret = S0.ret_solveLimited_val;
-//                printf("%s ",argv[1]);
-//                printStats(S0);
-//                printf("[Rank]: %d [Iterations]: %lld ",S0.Mpi_rank, S0.iterations);
-//                printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
-//            }
-//
-//            if(f2 && solver1()){
-//                flag = true;
-//                if(S1.readyToShare()){
-//                    S1.shareTo(S0);
-//                    S1.sharedClauseOut.clear();
-//                }
-////                std::cout << "[main]: ....... " << std::endl; //flush here
-//            }else if(f2){
-//                f2 = false;
-//                ret = S1.ret_solveLimited_val;
-//                printf("%s ",argv[1]);
-//                printStats(S1);
-//                printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
-//            }
-
         }
 
-
-//        if (S0.verbosity > 0){
-//            printStats(S0);
-//            printStats(S1);
-//            printf("\n"); }
-
-        //modified by @lavleshm
-//        printf("%s ",argv[1]);
-//        if(!f1) {
-//            printStats(S0);
-//            f1 =true;
-//        }
-//        if(!f2) {
-//            printStats(S1); //also been modified
-//            f2 = true;
-//        }
-        // ...............................................
-
-//        if (S.verbosity > 0){
-//            printStats(S);
-//            printf("\n");
-//        }
-//        printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
-
-        //modified by @lavleshm
-
-//        printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
-/*Removing temporarily*/
-//        if (res != NULL){
-//            if (ret == l_True){
-//                fprintf(res, "SAT\n");
-//                for (int i = 0; i < solvers[0].nVars(); i++)
-//                    if (solvers[0].model[i] != l_Undef)
-//                        fprintf(res, "%s%s%d", (i==0)?"":" ", (solvers[0].model[i]==l_True)?"":"-", i+1);
-//                fprintf(res, " 0\n");
-//            }else if (ret == l_False) {
-//                fprintf(res, "UNSAT\n");
-//                for (int i = 0; i < solvers[0].conflict.size(); i++) {
-//                    // Reverse the signs to keep the same sign as the assertion file.
-//                    fprintf(res, "%s%d\n", sign(solvers[0].conflict[i]) ? "" : "-", var(solvers[0].conflict[i]) + 1);
-//                }
-//            } else
-//                fprintf(res, "INDET\n");
-//            fclose(res);
-//        }
-/*Removing temporarily*/
+        if (res != NULL){
+            if (ret == l_True){
+                fprintf(res, "SAT\n");
+                for (int i = 0; i < solvers[0].nVars(); i++)
+                    if (solvers[0].model[i] != l_Undef)
+                        fprintf(res, "%s%s%d", (i==0)?"":" ", (solvers[0].model[i]==l_True)?"":"-", i+1);
+                fprintf(res, " 0\n");
+            }else if (ret == l_False) {
+                fprintf(res, "UNSAT\n");
+                for (int i = 0; i < solvers[0].conflict.size(); i++) {
+                    // Reverse the signs to keep the same sign as the assertion file.
+                    fprintf(res, "%s%d\n", sign(solvers[0].conflict[i]) ? "" : "-", var(solvers[0].conflict[i]) + 1);
+                }
+            } else
+                fprintf(res, "INDET\n");
+            fclose(res);
+        }
         //---------------------------------------------------------------------------------------
 
 //        MPI_Abort(MPI_COMM_WORLD, 0);
