@@ -85,22 +85,6 @@ static void SIGINT_exit(int signum) {
         printf("\n"); printf("*** INTERRUPTED ***\n"); }
     _exit(1); }
 
-//struct tester_arg{
-//    SimpSolver *S;
-//    vec<Lit>* dummy;
-//};
-//
-//void tester(void* arg){
-//    struct tester_arg * aarg = (struct tester_arg *)arg;
-//    aarg->S->solveLimited(*aarg->dummy);
-//}
-//void create_test_tasks(SimpSolver* simpSolver, vec<Lit>* dummy){
-//    struct tester_arg * ta = (tester_arg *)malloc(sizeof(tester_arg));
-//    ta->S = simpSolver;
-//    ta->dummy = dummy;
-//    scheduler_create_task(tester, ta);
-//}
-
 //=================================================================================================
 // Main:
 
@@ -128,7 +112,6 @@ int main(int argc, char** argv)
 
         parseOptions(argc, argv, true);
         
-//        std::vector<SimpSolver> solvers((int) num_solvers);
 
         SimpSolver solvers[(int) num_solvers];
         int num_instances = (int)num_solvers;

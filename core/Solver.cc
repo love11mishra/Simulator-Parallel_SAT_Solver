@@ -771,57 +771,26 @@ bool Solver::simplify()
 
     for (;;){
 
-        /* Here add MPI_Probe and after getting the shared_clause do:
-        *
-        * CRef cr = ca.alloc(shared_clause, true);
-        * learnts.push(cr);
-        * attachClause(cr);
-        * claBumpActivity(ca[cr]);
-        *
-        * */
-//        int flag = 1;
-//        do{
-//        MPI_Status my_status;
-////            int flag;
-//        MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &flag,  &my_status);
-        if(/*flag*/sharedClauseIn.size()> 0){
-//                MPI_Request recv_request;
-//            MPI_Status recv_status;
-//            int recv_buffer_len;
-//            MPI_Get_count(&my_status, MPI_INT, &recv_buffer_len);
-//            int recv_buffer[recv_buffer_len];
-////                MPI_Irecv(recv_buffer, recv_buffer_len, MPI_INT, my_status.MPI_SOURCE, my_status.MPI_TAG, MPI_COMM_WORLD, &recv_request);
-//            MPI_Recv(recv_buffer, recv_buffer_len, MPI_INT, my_status.MPI_SOURCE, my_status.MPI_TAG, MPI_COMM_WORLD, &recv_status);
-//            vec<Lit> shared_clause; //local variable used to hold shared clause
-//            sharedClause.copyTo(shared_clause);
-//            for (int i = 0; i < recv_buffer_len; ++i) {
-//                shared_clause.push(toLit(recv_buffer[i]));
-//            }
+
+        if(sharedClauseIn.size()> 0){
+
             std::set<int> lbds;
-//                  std::string lz;
             int undef_count = 0;
             int max_lvl = 0, lvl;
             bool isSatisfied = false;
-//                  bool isConflict = true;
             for (int i = 0; i < sharedClauseIn.size(); ++i) {
-//                shared_clause.push(toLit(recv_buffer[i]));
-//                      assert(!(level(var(shared_clause[i])) > decisionLevel() && value(shared_clause[i]) != l_Undef));
                 if(value(sharedClauseIn[i]) != l_Undef){
                     lvl = level(var(sharedClauseIn[i]));
                     lbds.insert(lvl);
-                    //std::cout<<"level is = "<<level(var(shared_clause[i]))<<"\n";
-//                          lz += std::to_string(lvl)+ " " ;
                     if(lvl > max_lvl) max_lvl = lvl;
                     if(value(sharedClauseIn[i]) == l_True) {
                         isSatisfied = true;
-//                              isConflict = false;
                     }
                 }
                 else {
                     undef_count++;
                     vardata[var(sharedClauseIn[i])].level = 0;
                     vardata[var(sharedClauseIn[i])].reason = CRef_Undef;
-//                          isConflict = false;
                 }
 
             }
@@ -830,7 +799,7 @@ bool Solver::simplify()
                 lbool flag = l_Undef;
                 Var max_level = -1;
                 int indx = 0;
-                for (int k = j; k < /*recv_buffer_len*/sharedClauseIn.size(); ++k) {
+                for (int k = j; k < sharedClauseIn.size(); ++k) {
                     if(value(sharedClauseIn[k]) != l_Undef && level(var(sharedClauseIn[k])) > max_level){
                         max_level = level(var(sharedClauseIn[k]));
                         indx = k;
@@ -840,20 +809,12 @@ bool Solver::simplify()
                 sharedClauseIn[j] = sharedClauseIn[indx];
                 sharedClauseIn[indx] = temp;
             }
-//            std::cout << "clause shared from process " <<my_status.MPI_SOURCE<< " to process "<<Mpi_rank<<" of size "<< recv_buffer_len <<"\n";
 
-
-//            if (shared_clause.size() == 1){
-//                uncheckedEnqueue(shared_clause[0]);
-//            }
-//            else{
             if(undef_count > 0) undef_count = 1;
             if(sharedClauseIn.size() > 1 && (lbds.size()+undef_count) < 5){
                 CRef cr = ca.alloc(sharedClauseIn, true);
                 learnts.push(cr);
                 attachClause(cr);
-               // claBumpActivity(ca[cr]);
-//                        addSharedClause(shared_clause);
 //                std::cout <<"received clause in " << Mpi_rank <<"\n";
 //                for (int j = 0; j < sharedClauseIn.size(); ++j) {
 //                    std::cout<<toInt(sharedClauseIn[j])<<" ";
@@ -862,16 +823,12 @@ bool Solver::simplify()
 
             }
             sharedClauseIn.clear();
-//            }
-//                MPI_Wait(&recv_request, &my_status);
         }
-//        }while(flag);
 
         //--------------------------------------------------------------------------------------------------------------
 
 
         CRef confl = propagate();
-//        std::cout << "In "<<Mpi_rank <<"\n";
 
 #if BRANCHING_HEURISTIC == CHB
         double multiplier = confl == CRef_Undef ? reward_multiplier : 1.0;
@@ -900,35 +857,14 @@ bool Solver::simplify()
                // return l_False;
                ret_search_val = l_False;
                return;
-//               std::cout<<"UNSATISFIABLE\n";
-//               _exit(0);
             }
 
             learnt_clause.clear();
             analyze(confl, learnt_clause, backtrack_level);
 
-            /* Here add the sharing information for the learnt_clause recently discovered
-             * Use of MPI_isend to all the other processes to send the learnt_clause(can not use MPI_Bcast as MPI_probe is
-             * a point to point communication standard)
-             * learnt_clause is a vec<Lits>
-             * Use Lit:toInt(Lit p) to convert a literal into integer and retrive back using Lit::toLit(int i) method
-             *
-             * */
             int buffer_len = learnt_clause.size();
             if(buffer_len <= 8 && learnt_clause.size() > 1){
-//                int send_buffer[buffer_len];
-//                MPI_Request my_request[Comm_size-1];
-////                MPI_Status my_status[Comm_size-1];
-//                //Copy literals as integers to the send_buffer
-////                std::ofstream myfile;
-////                myfile.open(lc_file, std::ios::app);
-////                std::string line="";
-//                sharedClauseOut.clear(); //check its requirement
-//                assert(sharedClauseOut.size() >= 2);
                 for(int i = 0; i < buffer_len; i++){
-//                    send_buffer[i] = toInt(learnt_clause[i]);
-////                    line += std::to_string(var(learnt_clause[i])) + " ";
-
                         sharedClauseOut.push(learnt_clause[i]);
                 }
 //                std::cout <<"clause shared from " << Mpi_rank <<"\n";
@@ -936,14 +872,6 @@ bool Solver::simplify()
 //                    std::cout<<toInt(learnt_clause[j])<<" ";
 //                }
 //                std::cout<<"\n";
-////                myfile << line <<"\n";
-////                std::cout << line <<" rank is "<< Mpi_rank<<"\n";
-////                myfile.close();
-//                //Send the buffer to all the other processes
-//                for(int i = 0 , j = 0; i < Comm_size ; i++){
-//                    if(i != Mpi_rank) MPI_Isend(send_buffer, buffer_len, MPI_INT, i, i, MPI_COMM_WORLD, &my_request[j++]);
-//                }
-//                MPI_Waitall(Comm_size-1, my_request,MPI_STATUS_IGNORE);
             }
 
             //------------------------------------------------------------------------------------------------------------
@@ -1009,8 +937,6 @@ bool Solver::simplify()
                 //return l_False;
                 ret_search_val = l_False;
                 return;
-//                std::cout<<"UNSATISFIABLE\n";
-//                _exit(0);
             }
 
             if (learnts.size()-nAssigns() >= max_learnts) {
@@ -1033,8 +959,6 @@ bool Solver::simplify()
                     //return l_False;
                     ret_search_val = l_False;
                     return;
-//                    std::cout<<"UNSATISFIABLE\n";
-//                    _exit(0);
                 }else{
                     next = p;
                     break;
@@ -1050,8 +974,6 @@ bool Solver::simplify()
                    // return l_True;
                    ret_search_val = l_True;
                     return;
-//                   std::cout<<"SATISFIABLE11\n";
-////                   _exit(0);
                 }
             }
 
@@ -1147,7 +1069,7 @@ static double luby(double y, int x){
         double rest_base = luby_restart ? luby(restart_inc, curr_restarts) : pow(restart_inc, curr_restarts);
         nof_conflicts = rest_base * restart_first;
 //        status = search(/*rest_base * restart_first*/source);
-        search(/*rest_base * restart_first*/source);
+        search(source);
         status = ret_search_val; //return value of search() method
         if (!withinBudget()) break;
         curr_restarts++;
