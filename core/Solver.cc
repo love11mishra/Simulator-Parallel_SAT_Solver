@@ -21,6 +21,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <math.h>
 #include <mpi.h>
 #include <iostream>
+#include <set>
 #include "../mtl/Sort.h"
 #include "../core/Solver.h"
 using namespace Minisat;
@@ -796,7 +797,34 @@ bool Solver::simplify()
 //            for (int i = 0; i < recv_buffer_len; ++i) {
 //                shared_clause.push(toLit(recv_buffer[i]));
 //            }
+            std::set<int> lbds;
+//                  std::string lz;
+            int undef_count = 0;
+            int max_lvl = 0, lvl;
+            bool isSatisfied = false;
+//                  bool isConflict = true;
+            for (int i = 0; i < sharedClauseIn.size(); ++i) {
+//                shared_clause.push(toLit(recv_buffer[i]));
+//                      assert(!(level(var(shared_clause[i])) > decisionLevel() && value(shared_clause[i]) != l_Undef));
+                if(value(sharedClauseIn[i]) != l_Undef){
+                    lvl = level(var(sharedClauseIn[i]));
+                    lbds.insert(lvl);
+                    //std::cout<<"level is = "<<level(var(shared_clause[i]))<<"\n";
+//                          lz += std::to_string(lvl)+ " " ;
+                    if(lvl > max_lvl) max_lvl = lvl;
+                    if(value(sharedClauseIn[i]) == l_True) {
+                        isSatisfied = true;
+//                              isConflict = false;
+                    }
+                }
+                else {
+                    undef_count++;
+                    vardata[var(sharedClauseIn[i])].level = 0;
+                    vardata[var(sharedClauseIn[i])].reason = CRef_Undef;
+//                          isConflict = false;
+                }
 
+            }
             // Literals with highest levels are put at first two positions in the shared_clause
             for (int j = 0; j < 2; ++j) {
                 lbool flag = l_Undef;
@@ -819,7 +847,8 @@ bool Solver::simplify()
 //                uncheckedEnqueue(shared_clause[0]);
 //            }
 //            else{
-            if(sharedClauseIn.size() > 1){
+            if(undef_count > 0) undef_count = 1;
+            if(sharedClauseIn.size() > 1 && (lbds.size()+undef_count) < 5){
                 CRef cr = ca.alloc(sharedClauseIn, true);
                 learnts.push(cr);
                 attachClause(cr);
@@ -830,9 +859,9 @@ bool Solver::simplify()
 //                    std::cout<<toInt(sharedClauseIn[j])<<" ";
 //                }
 //                std::cout<<"\n";
-                sharedClauseIn.clear();
-            }
 
+            }
+            sharedClauseIn.clear();
 //            }
 //                MPI_Wait(&recv_request, &my_status);
         }
