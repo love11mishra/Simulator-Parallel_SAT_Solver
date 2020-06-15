@@ -247,6 +247,7 @@ int main(int argc, char** argv)
 
 //        S0.eliminate(true); //handled up
 //        S1.eliminate(true); //handled up
+        for(SimpSolver& S :solvers) S.eliminate(true); //do not change its position
         double simplified_time = cpuTime();
         if (solvers[0].verbosity > 0){
             printf("|  Simplification time:  %12.2f s                                       |\n", simplified_time - parsed_time);
