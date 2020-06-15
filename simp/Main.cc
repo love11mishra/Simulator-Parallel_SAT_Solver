@@ -79,8 +79,8 @@ static void SIGINT_interrupt(int signum) {
 // functions are guarded by locks for multithreaded use).
 static void SIGINT_exit(int signum) {
     printf("\n"); printf("*** INTERRUPTED ***\n");
-    if (solver_ptrs[0]->verbosity > 0){
-        printStats(*solver_ptrs[0]);
+    if (solver_ptrs[0]->verbosity/*solver->verbosity*/ > 0){
+        printStats(/*solver*/*solver_ptrs[0]);
 //        printStats(*solver1);
         printf("\n"); printf("*** INTERRUPTED ***\n"); }
     _exit(1); }
@@ -128,16 +128,18 @@ int main(int argc, char** argv)
 
         parseOptions(argc, argv, true);
         
-        std::vector<SimpSolver> solvers((int) num_solvers);
-        for(int i = 0 ; i < (int)num_solvers ; i ++){
-//            solvers.push_back(SimpSolver());
+//        std::vector<SimpSolver> solvers((int) num_solvers);
+
+        SimpSolver solvers[(int) num_solvers];
+        int num_instances = (int)num_solvers;
+        for(int i = 0 ; i < num_instances ; i ++){
             solver_ptrs.push_back(&solvers[i]);
         }
-//        std::vector<SimpSolver>::iterator itr;
+//        SimpSolver S0/*, S1*/;
         int count = 0;
         for(SimpSolver& S : solvers){
                 S.Mpi_rank = count++;
-                S.random_seed = S.Mpi_rank * S.random_seed + 474837;
+                S.random_seed = S.Mpi_rank * S.random_seed + 334454;
                 S.iterations = 0;
         }
 //        S0.Mpi_rank = 0;
@@ -172,11 +174,11 @@ int main(int argc, char** argv)
 
 //        S0.verbosity = verb;
 //        S1.verbosity = verb;
+//        solver_ptrs.push_back(&S0);
 //        solver = &S0;  //handled up there in first loop
 //        solver1 = &S1; //handled up there in first loop
         for(SimpSolver& S :solvers){
             S.verbosity = verb;
-            S.eliminate(true);
         }
         // Use signal handlers that forcibly quit until the solver will be able to respond to
         // interrupts:
@@ -209,29 +211,31 @@ int main(int argc, char** argv)
 
 //        gzFile in = (argc == 1) ? gzdopen(0, "rb") : gzopen(argv[1], "rb");
 //        gzFile in1 = (argc == 1) ? gzdopen(0, "rb") : gzopen(argv[1], "rb");
-        gzFile in [solvers.size()];
-        for(int i = 0 ; i < solvers.size() ; i++) in[i] = (argc == 1) ? gzdopen(0, "rb") : gzopen(argv[1], "rb");
+        gzFile in [num_instances];
+        for(int i = 0 ; i < num_instances ; i++) in[i] = (argc == 1) ? gzdopen(0, "rb") : gzopen(argv[1], "rb");
+
         if (in == NULL)
             printf("ERROR! Could not open file: %s\n", argc == 1 ? "<stdin>" : argv[1]), exit(1);
-        
+
         if (solvers[0].verbosity > 0){
             printf("============================[ Problem Statistics ]=============================\n");
             printf("|                                                                             |\n"); }
-        
+
 //        parse_DIMACS(in, S0);
 //        parse_DIMACS(in1, S1);
 //        gzclose(in);
 //        gzclose(in1);
-        for(int i = 0 ; i < solvers.size() ; i++){
+        for(int i = 0 ; i < num_instances ; i++){
             parse_DIMACS(in[i], solvers[i]);
             gzclose(in[i]);
         }
+
         FILE* res = (argc >= 3) ? fopen(argv[2], "wb") : NULL;
 
         if (solvers[0].verbosity > 0){
             printf("|  Number of variables:  %12d                                         |\n", solvers[0].nVars());
             printf("|  Number of clauses:    %12d                                         |\n", solvers[0].nClauses()); }
-        
+
         double parsed_time = cpuTime();
         if (solvers[0].verbosity > 0)
             printf("|  Parse time:           %12.2f s                                       |\n", parsed_time - initial_time);
@@ -247,8 +251,7 @@ int main(int argc, char** argv)
         if (solvers[0].verbosity > 0){
             printf("|  Simplification time:  %12.2f s                                       |\n", simplified_time - parsed_time);
             printf("|                                                                             |\n"); }
-
-//        if (!S0.okay()||!S1.okay()){
+//        if (!S0.okay()){
 //            if (res != NULL) fprintf(res, "UNSAT\n"), fclose(res);
 //            if (S0.verbosity > 0){
 //                printf("===============================================================================\n");
@@ -270,7 +273,6 @@ int main(int argc, char** argv)
                 exit(20);
             }
         }
-
         if (dimacs){
             if (solvers[0].verbosity > 0)
                 printf("==============================[ Writing DIMACS ]===============================\n");
@@ -280,7 +282,6 @@ int main(int argc, char** argv)
 //                printStats(S1);
             exit(0);
         }
-
         vec<Lit> dummy;
         if (assumptions) {
             const char* file_name = assumptions;
@@ -298,9 +299,8 @@ int main(int argc, char** argv)
         for( int i = 0; i < dummy.size(); i++) {
             printf("%s%d\n", sign(dummy[i]) ? "-" : "", var(dummy[i]));
         }
-
         std::vector<boost::coroutines2::coroutine<void>::push_type> sinks;
-        for(int i = 0 ; i < solvers.size() ; i++){
+        for(int i = 0 ; i < num_instances ; i++){
             using boost::placeholders::_1; //we may need to take it out of the loop
             sinks.emplace_back(boost::bind(&SimpSolver::solveLimited, &solvers[i],_1));
         }
@@ -324,7 +324,7 @@ int main(int argc, char** argv)
                     flag = true;
                     if(solvers[i].readyToShare()){
 //                        S0.shareTo(S1);
-                        for (int j = 0; j < solvers.size(); j++){
+                        for (int j = 0; j < num_instances; j++){
                             if(j != i) solvers[i].shareTo(solvers[j]);
                         }
                         solvers[i].sharedClauseOut.clear(); //must be called only if clause has been shared with all others
@@ -347,11 +347,29 @@ int main(int argc, char** argv)
 //                    S0.sharedClauseOut.clear(); //must be called only if clause has been shared with all others
 //                }
 ////                std::cout << "[main]: ....... " << std::endl; //flush here
+//                }else if(isRunning[i]) {
+//                    isRunning[i] = false;
+//                    ret = solvers[i].ret_solveLimited_val;
+//                    printf("%s ",argv[1]);
+//                    printStats(solvers[i]);
+//                    printf("[Rank]: %d [Iterations]: %lld ",solvers[i].Mpi_rank, solvers[i].iterations);
+//                    printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
+//                }
+//            }
+
+//            if(f1 && solver()){
+//                flag = true;
+////                if(S0.readyToShare()){
+////                    S0.shareTo(S1);
+////                    S0.sharedClauseOut.clear(); //must be called only if clause has been shared with all others
+////                }
+////                std::cout << "[main]: ....... " << std::endl; //flush here
 //            }else if(f1) {
 //                f1 = false;
 //                ret = S0.ret_solveLimited_val;
 //                printf("%s ",argv[1]);
 //                printStats(S0);
+//                printf("[Rank]: %d [Iterations]: %lld ",S0.Mpi_rank, S0.iterations);
 //                printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
 //            }
 //
@@ -399,24 +417,25 @@ int main(int argc, char** argv)
         //modified by @lavleshm
 
 //        printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
-        if (res != NULL){
-            if (ret == l_True){
-                fprintf(res, "SAT\n");
-                for (int i = 0; i < solvers[0].nVars(); i++)
-                    if (solvers[0].model[i] != l_Undef)
-                        fprintf(res, "%s%s%d", (i==0)?"":" ", (solvers[0].model[i]==l_True)?"":"-", i+1);
-                fprintf(res, " 0\n");
-            }else if (ret == l_False) {
-                fprintf(res, "UNSAT\n");
-                for (int i = 0; i < solvers[0].conflict.size(); i++) {
-                    // Reverse the signs to keep the same sign as the assertion file.
-                    fprintf(res, "%s%d\n", sign(solvers[0].conflict[i]) ? "" : "-", var(solvers[0].conflict[i]) + 1);
-                }
-            } else
-                fprintf(res, "INDET\n");
-            fclose(res);
-        }
-
+/*Removing temporarily*/
+//        if (res != NULL){
+//            if (ret == l_True){
+//                fprintf(res, "SAT\n");
+//                for (int i = 0; i < solvers[0].nVars(); i++)
+//                    if (solvers[0].model[i] != l_Undef)
+//                        fprintf(res, "%s%s%d", (i==0)?"":" ", (solvers[0].model[i]==l_True)?"":"-", i+1);
+//                fprintf(res, " 0\n");
+//            }else if (ret == l_False) {
+//                fprintf(res, "UNSAT\n");
+//                for (int i = 0; i < solvers[0].conflict.size(); i++) {
+//                    // Reverse the signs to keep the same sign as the assertion file.
+//                    fprintf(res, "%s%d\n", sign(solvers[0].conflict[i]) ? "" : "-", var(solvers[0].conflict[i]) + 1);
+//                }
+//            } else
+//                fprintf(res, "INDET\n");
+//            fclose(res);
+//        }
+/*Removing temporarily*/
         //---------------------------------------------------------------------------------------
 
 //        MPI_Abort(MPI_COMM_WORLD, 0);
