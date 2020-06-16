@@ -129,7 +129,10 @@ Solver::Solver() :
   , conflict_budget    (-1)
   , propagation_budget (-1)
   , asynch_interrupt   (false)
-{}
+  , iterations         (0)
+{
+//    std::cout<<"[drand value]: "<<random()<<"[rank]: "<<Mpi_rank<<std::endl;
+}
 
 
 Solver::~Solver()
@@ -771,7 +774,7 @@ bool Solver::simplify()
 
     for (;;){
 
-
+        iterations++;
         if(sharedClauseIn.size()> 0){
 
             std::set<int> lbds;
@@ -811,7 +814,8 @@ bool Solver::simplify()
             }
 
             if(undef_count > 0) undef_count = 1;
-            if(sharedClauseIn.size() > 1 && (lbds.size()+undef_count) < 5){
+            assert(sharedClauseIn.size() > 1);
+            if(/*sharedClauseIn.size() > 1 &&*/ (lbds.size()+undef_count) < 5){
                 CRef cr = ca.alloc(sharedClauseIn, true);
                 learnts.push(cr);
                 attachClause(cr);
@@ -985,7 +989,6 @@ bool Solver::simplify()
             uncheckedEnqueue(next);
         }
         source();
-        iterations++;
     }
 }
 

@@ -122,8 +122,8 @@ int main(int argc, char** argv)
         int count = 0;
         for(SimpSolver& S : solvers){
                 S.Mpi_rank = count++;
-                S.random_seed = S.Mpi_rank * S.random_seed + 334454;
-                S.iterations = 0;
+                S.random_seed = S.Mpi_rank * S.random_seed + 273647;
+//                S.iterations = 0; //moved into the constructor
         }
 //        S0.Mpi_rank = 0;
 //        S1.Mpi_rank = 1;

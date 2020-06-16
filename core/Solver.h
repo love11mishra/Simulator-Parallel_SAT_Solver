@@ -45,7 +45,7 @@ public:
     inline bool readyToShare(){
         return (sharedClauseOut.size()> 0);
     }
-    void shareTo(Solver&);
+    void shareTo(Solver&);  //to share a clause to other instances
     // Problem specification:
     //
     Var     newVar    (bool polarity = true, bool dvar = true); // Add a new variable with parameters specifying variable mode.
