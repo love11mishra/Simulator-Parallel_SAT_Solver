@@ -23,6 +23,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include <string>
 #include <boost/coroutine2/all.hpp>
+#include <fstream>
 #include "../mtl/Vec.h"
 #include "../mtl/Heap.h"
 #include "../mtl/Alg.h"
@@ -94,6 +95,7 @@ public:
     int     nAssigns   ()      const;       // The current number of assigned literals.
     int     nClauses   ()      const;       // The current number of original clauses.
     int     nLearnts   ()      const;       // The current number of learnt clauses.
+    int     nShareds   ()      const;       // The current number of shared clauses. (added by @lavleshm)
     int     nVars      ()      const;       // The current number of variables.
     int     nFreeVars  ()      const;
 
@@ -151,7 +153,7 @@ public:
     // Statistics: (read-only member variable)
     //
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
-    uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
+    uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals, shared_literals;
 
     uint64_t lbd_calls;
     vec<uint64_t> lbd_seen;
@@ -185,6 +187,11 @@ public:
     lbool ret_search_val = l_Undef;
     lbool ret_solve__val;
     lbool ret_solveLimited_val;
+    int64_t num_learnt;
+    int64_t num_shared;
+    std::string sFileName;
+    std::string lFileName;
+    std::ofstream lfile, sfile;
     /*----------------------------------------------------------------*/
 protected:
 
@@ -219,6 +226,7 @@ protected:
     bool                ok;               // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
     vec<CRef>           clauses;          // List of problem clauses.
     vec<CRef>           learnts;          // List of learnt clauses.
+    vec<CRef>           shareds;          //List of shared clauses. (addec by @lavleshm)
 #if ! LBD_BASED_CLAUSE_DELETION
     double              cla_inc;          // Amount to bump next clause with.
 #endif
@@ -397,6 +405,7 @@ inline lbool    Solver::modelValue    (Lit p) const   { return model[var(p)] ^ s
 inline int      Solver::nAssigns      ()      const   { return trail.size(); }
 inline int      Solver::nClauses      ()      const   { return clauses.size(); }
 inline int      Solver::nLearnts      ()      const   { return learnts.size(); }
+inline int      Solver::nShareds      ()      const   { return shareds.size(); }
 inline int      Solver::nVars         ()      const   { return vardata.size(); }
 inline int      Solver::nFreeVars     ()      const   { return (int)dec_vars - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]); }
 inline void     Solver::setPolarity   (Var v, bool b) { polarity[v] = b; }

@@ -33,7 +33,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <boost/bind.hpp>
 #include <iostream>
 #include <vector>
-
+#include <sys/types.h>
+#include <sys/stat.h>
 using namespace Minisat;
 
 //=================================================================================================
@@ -127,24 +128,26 @@ int main(int argc, char** argv)
         }
 //        S0.Mpi_rank = 0;
 //        S1.Mpi_rank = 1;
-        /* Initializing MPI and updating solver state -----------------------------*/
+        /* Creating directories and files -----------------------------*/
+        std::string problemName = argv[1];
+        std::string delimeter = "/";
+        size_t pos = 0;
+        std::string token;
+        while ((pos = problemName.find(delimeter)) != std::string::npos){
+//            token = problemName.substr(0, pos);
+            problemName.erase(0, pos+delimeter.length());
+        }
+        mkdir(problemName.c_str(), 0777); //creating directory of name same as instance name
 
-//        MPI_Init( &argc, &argv );
-//        MPI_Comm_size(MPI_COMM_WORLD, &S.Comm_size);
-//        MPI_Comm_rank(MPI_COMM_WORLD, &S.Mpi_rank);
-//        S0.random_seed = S0.Mpi_rank*S0.random_seed + 37891; //constant addition is used to get initial seed as non zero
-//        S1.random_seed = S1.Mpi_rank*S1.random_seed + 67867;
-//        S0.rnd_init_act = true;
-//        std::cout<<"[S0 seed]: "<<S0.random_seed<<"[S1 seed]: "<<S1.random_seed<<std::endl;
-//        MPI_Pcontrol(1);
-//        MPI_Pcontrol(2);
-//        S.rnd_init_act = true;
-//        S.lc_file = "file_" + std::to_string(S.Mpi_rank);
-//        std::ofstream myfile;
-//        myfile.open(S.lc_file);
-//        myfile.close();
-        //
-//        S.rnd_pol = true;
+        for(SimpSolver& S: solvers){
+            S.sFileName = "./"+ problemName + "/" + "shared_" + std::to_string(S.Mpi_rank)+".txt";
+//            std::cout << S.sFileName <<"here"<<std::endl;
+            S.lFileName = "./"+ problemName + "/" + "learnt_" + std::to_string(S.Mpi_rank)+".txt";
+            S.sfile.open(S.sFileName);
+            S.lfile.open(S.lFileName);
+        }
+
+
         /*-------------------------------------------------------------------------*/
 
         double      initial_time = cpuTime();
@@ -214,7 +217,8 @@ int main(int argc, char** argv)
         }
 
         FILE* res = (argc >= 3) ? fopen(argv[2], "wb") : NULL;
-
+        std::string opFileName = "./"+problemName+"/"+"outPut.txt";  //added by @lavleshm
+        FILE* opFile = fopen(opFileName.c_str(), "wb"); //added by @lavleshm
         if (solvers[0].verbosity > 0){
             printf("|  Number of variables:  %12d                                         |\n", solvers[0].nVars());
             printf("|  Number of clauses:    %12d                                         |\n", solvers[0].nClauses()); }
@@ -317,15 +321,21 @@ int main(int argc, char** argv)
                 }else if(isRunning[i]) {
                     isRunning[i] = false;
                     ret = solvers[i].ret_solveLimited_val;
-                    printf("%s ",argv[1]);
+                    printf("%s ",/*argv[1]*/problemName.c_str());
                     printStats(solvers[i]);
-                    printf("[Rank]: %d [Iterations]: %lld ",solvers[i].Mpi_rank, solvers[i].iterations);
+                    printf("[Rank]: %d [Iterations]: %lld [Conflicts]: %ld ",solvers[i].Mpi_rank, solvers[i].iterations, solvers[i].conflicts);
                     printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
+
+                    //Saving to file
+                    fprintf(opFile, "%s ",/*argv[1]*/problemName.c_str());
+                    fprintf(opFile, "CPU time: %g s ", cpuTime());
+                    fprintf(opFile, "[Rank]: %d [Iterations]: %lld [Conflicts]: %ld ",solvers[i].Mpi_rank, solvers[i].iterations, solvers[i].conflicts);
+                    fprintf(opFile, ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
                 }
             }
 
         }
-
+        fclose(opFile);
         if (res != NULL){
             if (ret == l_True){
                 fprintf(res, "SAT\n");

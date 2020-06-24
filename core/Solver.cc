@@ -24,6 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <set>
 #include "../mtl/Sort.h"
 #include "../core/Solver.h"
+#include <fstream>
 using namespace Minisat;
 
 //=================================================================================================
@@ -101,7 +102,7 @@ Solver::Solver() :
     // Statistics: (formerly in 'SolverStats')
     //
   , solves(0), starts(0), decisions(0), rnd_decisions(0), propagations(0), conflicts(0)
-  , dec_vars(0), clauses_literals(0), learnts_literals(0), max_literals(0), tot_literals(0)
+  , dec_vars(0), clauses_literals(0), learnts_literals(0), max_literals(0), tot_literals(0), shared_literals(0)
 
   , lbd_calls(0)
 #if BRANCHING_HEURISTIC == CHB
@@ -130,13 +131,20 @@ Solver::Solver() :
   , propagation_budget (-1)
   , asynch_interrupt   (false)
   , iterations         (0)
+  , num_learnt         (0)
+  , num_shared         (0)
 {
 //    std::cout<<"[drand value]: "<<random()<<"[rank]: "<<Mpi_rank<<std::endl;
+//    lfile.open(lFileName);
+//    sfile.open(sFileName);
+
 }
 
 
 Solver::~Solver()
 {
+    lfile.close();
+    sfile.close();
 }
 
 
@@ -200,7 +208,7 @@ bool Solver::addClause_(vec<Lit>& ps)
         uncheckedEnqueue(ps[0]);
         return ok = (propagate() == CRef_Undef);
     }else{
-        CRef cr = ca.alloc(ps, false);
+        CRef cr = ca.alloc(ps, false, 0);
         clauses.push(cr);
         attachClause(cr);
     }
@@ -215,6 +223,7 @@ void Solver::attachClause(CRef cr) {
     watches[~c[0]].push(Watcher(cr, c[1]));
     watches[~c[1]].push(Watcher(cr, c[0]));
     if (c.learnt()) learnts_literals += c.size();
+    else if(c.shared()) shared_literals += c.size();
     else            clauses_literals += c.size(); }
 
 
@@ -232,11 +241,31 @@ void Solver::detachClause(CRef cr, bool strict) {
     }
 
     if (c.learnt()) learnts_literals -= c.size();
+    else if(c.shared()) shared_literals -= c.size();
     else            clauses_literals -= c.size(); }
 
 
 void Solver::removeClause(CRef cr) {
+
     Clause& c = ca[cr];
+    if(c.learnt() && !c.shared()) {
+        num_learnt--; //added by @lavleshm
+        std::string clstr = c.toString();
+        clstr.append(std::to_string((conflicts - c.getBirth())) + " " + std::to_string(c.getUSe()) + " " + std::to_string(c.getLbd()));
+//        clstr.append(" ");
+//        clstr.append(std::to_string(c.getUSe()));
+//        clstr.append(" ");
+        lfile << clstr <<"\n";
+//        std::cout <<"removel clause in " << lbd(c) <<" "<<std::to_string(lbd(c))<<"\n";
+    }
+    else if(c.shared()) {
+        num_shared--;
+        std::string clstr = c.toString();
+        clstr.append(std::to_string((conflicts - c.getBirth())) + " " + std::to_string(c.getUSe()) + " " + std::to_string(c.getLbd()));
+//        clstr.append(" ");
+//        clstr.append(std::to_string(c.getUSe()));
+        sfile << clstr <<"\n";
+    }
     detachClause(cr);
     // Don't leave pointers to free'd memory!
     if (locked(c)) vardata[var(c[0])].reason = CRef_Undef;
@@ -362,9 +391,9 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
     do{
         assert(confl != CRef_Undef); // (otherwise should be UIP)
         Clause& c = ca[confl];
-
+        if(c.learnt() || c.shared()) c.incUse(); //added by @lavleshm
 #if LBD_BASED_CLAUSE_DELETION
-        if (c.learnt() && c.activity() > 2)
+        if ((c.learnt() || c.shared()) && c.activity() > 2)
             c.activity() = lbd(c);
 #else
         if (c.learnt())
@@ -671,6 +700,7 @@ void Solver::reduceDB()
     int     i, j;
 #if LBD_BASED_CLAUSE_DELETION
     sort(learnts, reduceDB_lt(ca, activity));
+    sort(shareds, reduceDB_lt(ca, activity));
 #else
     double  extra_lim = cla_inc / learnts.size();    // Remove any clause below this activity
     sort(learnts, reduceDB_lt(ca));
@@ -692,6 +722,15 @@ void Solver::reduceDB()
             learnts[j++] = learnts[i];
     }
     learnts.shrink(i - j);
+//shared clauses removal
+    for (i = j = 0; i < shareds.size(); i++){
+        Clause& c = ca[shareds[i]];
+        if (c.activity() > 2 && !locked(c) && i < shareds.size() / 2)
+                    removeClause(shareds[i]);
+                else
+                    shareds[j++] = shareds[i];
+            }
+        shareds.shrink(i - j);
     checkGarbage();
 }
 
@@ -740,13 +779,14 @@ bool Solver::simplify()
 
     // Remove satisfied clauses:
     removeSatisfied(learnts);
+    removeSatisfied(shareds);
     if (remove_satisfied)        // Can be turned off.
         removeSatisfied(clauses);
     checkGarbage();
     rebuildOrderHeap();
 
     simpDB_assigns = nAssigns();
-    simpDB_props   = clauses_literals + learnts_literals;   // (shouldn't depend on stats really, but it will do for now)
+    simpDB_props   = clauses_literals + learnts_literals + shared_literals;   // (shouldn't depend on stats really, but it will do for now)
 
     return true;
 }
@@ -815,11 +855,14 @@ bool Solver::simplify()
 
             if(undef_count > 0) undef_count = 1;
             assert(sharedClauseIn.size() > 1);
-            if(/*sharedClauseIn.size() > 1 &&*/ (lbds.size()+undef_count) < 5){
-                CRef cr = ca.alloc(sharedClauseIn, true);
-                learnts.push(cr);
+            if(/*sharedClauseIn.size() > 1 &&!isSatisfied &&*/(lbds.size()+undef_count) < 5){
+                CRef cr = ca.alloc(sharedClauseIn, false, 1, conflicts, 0, lbd(sharedClauseIn));
+                shareds.push(cr);
                 attachClause(cr);
-//                std::cout <<"received clause in " << Mpi_rank <<"\n";
+                num_shared++;
+                Clause &c = ca[cr];
+//                c.setBirth(conflicts);
+//                std::cout <<"received clause in " << lbd(c) <<(lbds.size()+undef_count) <<lbd(sharedClauseIn)<<"\n";
 //                for (int j = 0; j < sharedClauseIn.size(); ++j) {
 //                    std::cout<<toInt(sharedClauseIn[j])<<" ";
 //                }
@@ -891,9 +934,13 @@ bool Solver::simplify()
             if (learnt_clause.size() == 1){
                 uncheckedEnqueue(learnt_clause[0]);
             }else{
-                CRef cr = ca.alloc(learnt_clause, true);
+                CRef cr = ca.alloc(learnt_clause, true, 0, conflicts,0 , lbd(learnt_clause));
                 learnts.push(cr);
                 attachClause(cr);
+                num_learnt++;
+//                Clause &c = ca[cr];
+//                std::cout <<"learnt clause in " << lbd(c) <<"\n";
+//                c.setBirth(conflicts);
 #if LBD_BASED_CLAUSE_DELETION
                 Clause& clause = ca[cr];
                 clause.activity() = lbd(clause);
@@ -918,10 +965,10 @@ bool Solver::simplify()
 #endif
 
                 if (verbosity >= 1)
-                    printf("| %9d | %7d %8d %8d | %8d %8d %6.0f | %6.3f %% |   %d\n",
+                    printf("| %9d | %7d %8d %8d | %8d %8d %6.0f | %6.3f %% | %7d | %7ld | %7ld | %7d |\n",
                            (int)conflicts,
                            (int)dec_vars - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]), nClauses(), (int)clauses_literals,
-                           (int)max_learnts, nLearnts(), (double)learnts_literals/nLearnts(), progressEstimate()*100, Mpi_rank);
+                           (int)max_learnts, nLearnts(), (double)learnts_literals/nLearnts(), progressEstimate()*100, Mpi_rank, num_learnt, num_shared, nShareds());
             }
 
         }else{
@@ -943,7 +990,7 @@ bool Solver::simplify()
                 return;
             }
 
-            if (learnts.size()-nAssigns() >= max_learnts) {
+            if (learnts.size()+shareds.size()-nAssigns() >= max_learnts) {
                 // Reduce the set of learnt clauses:
                 reduceDB();
 #if RAPID_DELETION
@@ -1090,6 +1137,27 @@ static double luby(double y, int x){
         ok = false;
 
     cancelUntil(0);
+    for(int j = 0; j < learnts.size(); ++j) {
+//        removeClause(learnts[j]);
+        CRef cr = learnts[j];
+        Clause & c = ca[cr];
+        std::string clstr = c.toString();
+        clstr.append(std::to_string((conflicts - c.getBirth())) + " " + std::to_string(c.getUSe()) + " " + std::to_string(c.getLbd()));//        clstr.append(" ");
+//        clstr.append(std::to_string(c.getUSe()));
+        lfile << clstr <<"\n";
+
+    }
+    for(int j = 0; j < shareds.size(); ++j) {
+//        removeClause(shareds[j]);
+        CRef cr = shareds[j];
+        Clause & c = ca[cr];
+        std::string clstr = c.toString();
+        clstr.append(std::to_string((conflicts - c.getBirth())) + " " + std::to_string(c.getUSe()) + " " + std::to_string(c.getLbd()));
+//        clstr.append(" ");
+//        clstr.append(std::to_string(c.getUSe()));
+        sfile << clstr <<"\n";
+//        std::cout <<"learnt clause in " << lbd(c)<<" "<< <<"\n";
+    }
 //    return status;
     ret_solve__val = status;
 }
@@ -1203,6 +1271,11 @@ void Solver::relocAll(ClauseAllocator& to)
     //
     for (int i = 0; i < learnts.size(); i++)
         ca.reloc(learnts[i], to);
+
+    // All shared:  (added by @lavleshm)
+    //
+    for (int i = 0; i < shareds.size(); i++)
+        ca.reloc(shareds[i], to);
 
     // All original:
     //

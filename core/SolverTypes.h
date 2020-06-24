@@ -53,6 +53,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #endif
 
 #include <assert.h>
+#include <string>
 
 #include "../mtl/IntTypes.h"
 #include "../mtl/Alg.h"
@@ -159,27 +160,38 @@ class Clause {
     struct {
         unsigned mark      : 2;
         unsigned learnt    : 1;
+        unsigned shared    : 2; //added by @lavleshm
         unsigned has_extra : 1;
         unsigned reloced   : 1;
-        unsigned size      : 27; }                            header;
+        unsigned size      : 25;
+        u_int64_t born     : 64;
+        u_int64_t use      : 64;
+        unsigned lbd       :32; }                            header;
     union { Lit lit; Act act; uint32_t abs; CRef rel; } data[0];
+
+//    int64_t born, use; //added by @lavleshm
 
     friend class ClauseAllocator;
 
     // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
     template<class V>
-    Clause(const V& ps, bool use_extra, bool learnt) {
+    Clause(const V& ps, bool use_extra, bool learnt, int shared, u_int64_t conflicts, u_int64_t used, uint32_t lbd) {
         header.mark      = 0;
         header.learnt    = learnt;
+        header.shared    = shared; //added by @lavleshm
         header.has_extra = use_extra;
         header.reloced   = 0;
         header.size      = ps.size();
-
+        header.born      = conflicts;
+        header.use       = used;
+        header.lbd       = lbd;
+//        born = 0;
+//        use = 0;
         for (int i = 0; i < ps.size(); i++) 
             data[i].lit = ps[i];
 
         if (header.has_extra){
-            if (header.learnt)
+            if (header.learnt || header.shared)
                 data[header.size].act = 0; 
             else 
                 calcAbstraction(); }
@@ -198,6 +210,11 @@ public:
     void         shrink      (int i)         { assert(i <= size()); if (header.has_extra) data[header.size-i] = data[header.size]; header.size -= i; }
     void         pop         ()              { shrink(1); }
     bool         learnt      ()      const   { return header.learnt; }
+    int          shared      ()      const   { return header.shared;} //added by @lavleshm
+    u_int64_t      getBirth  ()      const   { return header.born; }
+    u_int64_t    getUSe      ()      const   { return header.use; }
+    void         incUse      ()              {header.use++;}
+    unsigned     getLbd      ()      const   {return header.lbd; } //lbd when clause is created
     bool         has_extra   ()      const   { return header.has_extra; }
     uint32_t     mark        ()      const   { return header.mark; }
     void         mark        (uint32_t m)    { header.mark = m; }
@@ -218,6 +235,15 @@ public:
 
     Lit          subsumes    (const Clause& other) const;
     void         strengthen  (Lit p);
+
+    std::string toString     ()             {
+        std::string token = "";
+        for(int i = 0 ; i < size(); ++i){
+            token.append(std::to_string(toInt(data[i].lit)));
+            token.append(" ");
+        }
+        return token;
+    }
 };
 
 
@@ -241,14 +267,14 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         RegionAllocator<uint32_t>::moveTo(to); }
 
     template<class Lits>
-    CRef alloc(const Lits& ps, bool learnt = false)
+    CRef alloc(const Lits& ps, bool learnt = false, int shared = 0, int conflicts = 0, int used = 0, unsigned lbd = 500)
     {
         assert(sizeof(Lit)      == sizeof(uint32_t));
         assert(sizeof(float)    == sizeof(uint32_t));
-        bool use_extra = learnt | extra_clause_field;
+        bool use_extra = learnt | (bool)shared | extra_clause_field;
 
         CRef cid = RegionAllocator<uint32_t>::alloc(clauseWord32Size(ps.size(), use_extra));
-        new (lea(cid)) Clause(ps, use_extra, learnt);
+        new (lea(cid)) Clause(ps, use_extra, learnt, shared, conflicts, used, lbd);
 
         return cid;
     }
@@ -272,13 +298,13 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         
         if (c.reloced()) { cr = c.relocation(); return; }
         
-        cr = to.alloc(c, c.learnt());
+        cr = to.alloc(c, c.learnt(), c.shared(), c.getBirth(), c.getUSe(), c.getLbd());
         c.relocate(cr);
         
         // Copy extra data-fields: 
         // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
         to[cr].mark(c.mark());
-        if (to[cr].learnt())         to[cr].activity() = c.activity();
+        if (to[cr].learnt() || to[cr].shared())         to[cr].activity() = c.activity();
         else if (to[cr].has_extra()) to[cr].calcAbstraction();
     }
 };
@@ -404,6 +430,7 @@ inline Lit Clause::subsumes(const Clause& other) const
     //if (other.size() < size() || (extra.abst & ~other.extra.abst) != 0)
     //if (other.size() < size() || (!learnt() && !other.learnt() && (extra.abst & ~other.extra.abst) != 0))
     assert(!header.learnt);   assert(!other.header.learnt);
+    assert(!header.shared);   assert(!other.header.shared);
     assert(header.has_extra); assert(other.header.has_extra);
     if (other.header.size < header.size || (data[header.size].abs & ~other.data[other.header.size].abs) != 0)
         return lit_Error;
